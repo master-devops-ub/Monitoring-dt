@@ -1,0 +1,46 @@
+---
+version: "3.6"
+services:
+
+  blockchain:
+    build: blockchain
+    healthcheck:
+      test: [ "CMD", "curl", "-s", "-f", "http://localhost:80/api/blockchain/health" ]
+
+  orders:
+    build: orders
+    healthcheck:
+      test: [ "CMD", "curl", "-s", "-f", "http://localhost:80/api/orders/health" ]
+
+  db:
+    image: mysql:5.6
+    environment:
+      MYSQL_DATABASE: "db"
+      MYSQL_USER: "user"
+      MYSQL_PASSWORD: "password"
+      MYSQL_ROOT_PASSWORD: "password"
+    labels:
+      co.elastic.logs/enabled: false
+    ports:
+      - "3306:3306"
+    volumes:
+      - "./database:/docker-entrypoint-initdb.d"
+    healthcheck:
+      test: '/usr/bin/mysql --user=root --password=password --execute "SHOW DATABASES;"'
+      interval: 2s
+      timeout: 20s
+      retries: 3
+
+  webproxy:
+    image: nginxproxy/nginx-proxy
+    links: [ orders,blockchain,db ]
+    depends_on:
+      orders:
+        condition: service_healthy
+      blockchain:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./webproxy/nginx.conf:/etc/nginx/nginx.conf
+      - /var/run/docker.sock:/tmp/docker.sock:ro
